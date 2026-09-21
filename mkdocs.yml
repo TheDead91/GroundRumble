@@ -1,0 +1,67 @@
+site_name: GroundRumble
+site_description: A visual, privacy-first LLM security workbench — turn security research into editable, MITRE ATLAS-mapped attack suites, then compare how different models and deployments hold up side-by-side in your browser. No install, backend, accounts, or telemetry.
+site_url: https://groundrumble.readthedocs.io/
+repo_url: https://github.com/TheDead91/GroundRumble
+edit_uri: blob/main/docs/
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: purple
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: indigo
+      accent: purple
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.instant
+    - navigation.top
+    - toc.follow
+    - content.code.copy
+
+extra_css:
+  - assets/css/extra.css
+
+markdown_extensions:
+  - admonition
+  - tables
+  - toc:
+      permalink: true
+  - attr_list
+  - md_in_html
+  - pymdownx.superfences
+  - pymdownx.highlight
+  - pymdownx.inlinehilite
+  - pymdownx.critic
+  - pymdownx.caret
+  - pymdownx.keys
+  - pymdownx.mark
+  - pymdownx.tilde
+
+nav:
+  - Home: index.md
+  - Quick Start: quickstart.md
+  - Use Cases: use-cases.md
+  - Concepts & Scoring: concepts.md
+  - Features:
+      - Security Dashboard: features/dashboard.md
+      - ATLAS Matrix: features/matrix.md
+      - Test Management: features/test-library.md
+      - AI Test Generation: features/ai-test-generation.md
+      - Auditor Runner: features/auditor-runner.md
+      - Evaluation Engines: features/evaluation-engines.md
+      - AI Prompts: features/ai-prompts.md
+      - Sandbox Mode: features/sandbox.md
+      - Key Vault: features/key-vault.md
+      - Settings: features/settings-backup.md
+  - Providers: providers.md
+  - Security & Privacy: security.md
+  - Development: development.md
+  - Testing & Coverage: testing.md
+  - License & Legal: legal.md

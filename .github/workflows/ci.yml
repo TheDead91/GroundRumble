@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: node
+          cache: npm
+      - run: node --version
+      - run: npm ci
+      - run: npm audit --audit-level=high
+      - run: npm run lint
+      - run: npm test
+      - run: npm run test:integrity
+      - run: npm run test:coverage:unit
+      - run: npm run build
+      - run: npm run check:bundle
+
+  # Retain the browser required-check name while enforcing combined Node +
+  # Chromium coverage over all application JS/JSX and the critical workflows.
+  browser:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: node
+          cache: npm
+      - run: node --version
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:coverage:ci
+      - name: Upload coverage and workflow evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-coverage
+          include-hidden-files: true
+          path: |
+            .tmp/coverage-all/coverage-summary.json
+            .tmp/coverage-all/**/*.html
+            .tmp/coverage-all/*.css
+            .tmp/coverage-all/*.js
+            .tmp/coverage-all/*.png
+            .tmp/ui-workflow-results.json
+            tests/screenshots/e2e-run/

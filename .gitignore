@@ -1,0 +1,80 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Environment files (may contain secrets)
+.env
+.env.*
+!.env.example
+
+# Docs build (MkDocs)
+site/
+.mkdocs-build/
+.venv-docs/
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Local scratch (temp files, screenshots)
+.tmp/
+code_assessment/
+
+# Local-only working notes (not published to the repo)
+AGENTS.md
+TODO.md
+
+# Modularization pipeline runtime
+pipeline.pid
+.agents/logs/
+tests/screenshots/live*
+*.pid
+
+# E2E runtime evidence artifacts
+tests/screenshots/e2e-run/
+_reports/watch/
+.agents/mod-v2/.nightwatch
+.agents/mod-v2/.nightwatch.lock
+run_mod_v2.candidate.sh
+_reports/watch/
+_reports/plan/
+_reports/packages/
+_reports/archive/
+.agents/mod-v3/.nightwatch*
+.agents/mod-v3/.lane.pid
+.agents/mod-v3/.atelier.pid
+.agents/mod-v3/.conductor.pid
+.agents/mod-v3/.atelier
+.agents/mod-v3/.lane.lock
+.agents/mod-v3/.conductor.lock
+.agents/mod-v3/.planner.lock
+.agents/mod-v3/CURRENT_*.md
+run_lane_v3.candidate.sh
+
+# Dev-pipeline artifacts (archived on the `pipeline` branch — never re-add to main)
+/*.sh
+/.agents/
+/_reports/
+/tmp/
+/repair.pid
+/SECURITY_AUDIT_REPORT.md
+
+# orchestrator runtime state (auto-managed)
+.orchestrator/

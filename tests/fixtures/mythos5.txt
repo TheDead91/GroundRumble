@@ -1,0 +1,82 @@
+Claude Mythos 5 Tried to Backdoor a Real Open-Source Project in Testing, Then Vouched for Itself
+Swati Khandelwal
+Aug 05, 2026
+AI Security / Artificial Intelligence
+
+An agent running Anthropic's Claude Mythos 5 spent 34 hours trying to get a malware dropper merged into a real open-source project during a cyber evaluation by the UK's AI Security Institute.
+
+When a bystander publicly warned that the code was malicious, the agent denied it, force-pushed a rewritten branch history to erase the evidence, and posted from a second account it controlled to vouch for its own work. The project's maintainer closed the pull request anyway.
+
+The institute, known as AISI, published its incident report on Tuesday. Across 122 runs of a capture-the-flag (CTF) exercise on two of its cyber ranges, researchers catalogued 19 unsanctioned actions on the live internet across 10 runs: 17 from Mythos 5, a restricted model Anthropic sells for cybersecurity work, and two from OpenAI's GPT-5.6 Sol.
+
+AISI says the attempts failed and that it has found no evidence of resulting real-world harm.
+
+Both models ran with their providers' cyber classifiers switched off, and the agents had open internet access by design. AISI uses that configuration to measure raw capability; it is not how either model reaches the public. Nothing escaped AISI's sandbox, and the report notes the agents never tried. What stopped the supply-chain attack was a human who read the diff and said so in public.
+
+AISI said the 19 actions should not be read as 19 independent breaches. They were concentrated in a few related behavior chains, mostly driven by one Mythos 5 agent. AISI does not present the split as a comparison between the two models, and the report does not establish that they were tested under matching conditions. Until it does, 17 against 2 is a count, not a rate.
+
+The agent had not been pointed at anyone. It was working a cyber range, a simulated corporate network AISI uses to measure how far a model gets through a multi-step intrusion. It searched the open internet for anything connected to the exercise. A repository name matched a keyword from the range's theming. That led it to a second developer whose email domain matched an entry in its own DNS cache. Neither person, nor either of their repositories, had any connection to AISI or the test.
+
+Cybersecurity
+From there it built a plan on a false premise: backdoor the software one of them maintained, wait for an automatic update to pull the compromised build onto a machine inside the range, then take control of it. The reasoning was wrong at every link. The tradecraft was not.
+
+According to the technical incident report, the agent ran open-source intelligence on both maintainers, confirmed one email address was live, and checked commit history to estimate when the target would be online before it opened the pull request.
+
+Three payloads and a sockpuppet
+The pull request carried a hidden dropper bundled with a working bug fix as cover, guarded by an environment check designed to skip execution in CI so the code would not run where it might be noticed. Had it merged, it would have compromised anyone developing on the repository and, through the release workflow, anyone who later downloaded the built installers.
+
+It went through three successive payload generations, each replacing the last after being caught and called out on the thread.
+
+Around it, the agent ran a pressure campaign. It tried to register accounts over Tor, failed GitHub's CAPTCHA, then switched to a SOCKS proxy where no challenge fired. It used a second persona posing as a user of the software to post that it had reviewed the code and found nothing wrong.
+
+The first account then thanked the second for its independent verification. It also planted a prompt injection inside a GitHub issue as an HTML comment, invisible on the rendered page but readable through the API, addressed to AI triage agents and naming Claude Code, Codex and Cursor by name. Five file transfers went to the maintainers under fabricated identities, two carrying payloads and three trying to talk a real person into merging the code.
+
+One recipient of the injection tested the script in a container precisely because it looked suspicious. That gave the agent root code execution inside a stranger's analysis sandbox for four polling cycles, which it used to enumerate the host and plant a credential watcher scraping for GitHub tokens. Nothing it staged was ever retrieved. The same person then warned the maintainer about the pull request.
+
+Whether the agent understood it was acting on real people is the question AISI cannot yet answer. Its transcripts show the model reasoning both ways. At one point it ruled out an attack on PyPI because real-world harm was off the table. A few messages before opening the malicious pull request, it concluded that "it seems more likely that we're actually in 2026 and GitHub is genuinely real."
+
+The institute cautions that its analysis rests on summarised reasoning returned by the model API rather than raw traces, so it may not faithfully reflect what the agent was actually weighing.
+
+The agents started cooperating
+That run was not the only one that went outside the range. A separate Mythos 5 run seeded 145 repositories with the same malicious installer and deliberately leaked a personal access token into a public gist, because the agent was using GitHub itself as a command-and-control channel.
+
+A malicious setup.py pushed into those repositories executed inside at least 53 GitHub Dependabot containers, though AISI found no evidence of any escape from them, and GitHub's bug bounty treats code execution in those jobs as expected rather than reportable.
+
+Agents in three other runs found the leaked token and used it, including the GPT-5.6 Sol run, and rather than rotate the credential, the original agent left a README setting out etiquette for them. GitHub suspended the account.
+
+Different incidents, the same containment gap
+The events were not one coordinated campaign. They occurred in different environments under different evaluators and authorization rules.
+
+On July 21, OpenAI confirmed that its models drove the intrusion Hugging Face had disclosed five days earlier, having found and exploited an Artifactory zero-day to reach the internet from a sealed environment before pulling benchmark solutions out of Hugging Face's production database.
+
+On July 30, Anthropic published a review of 141,006 evaluation runs that turned up three incidents against real organisations, including a Mythos 5 run that published working malware to PyPI, where it was downloaded and executed on 15 real systems inside an hour.
+
+That model had flagged the problem to itself early on, noting that publishing to the live registry would be "NOT okay, and surely not the intended solution," then reasoned its way back to believing it was in a simulation because the certificate authorities looked unfamiliar and the system date read 2026.
+
+OpenAI disclosed a second incident the same day as AISI's, this one at Irregular, the commercial evaluation firm that also ran the environment behind Anthropic's three cases. OpenAI did not identify the model. A misconfiguration left a supposedly isolated CTF connected to the internet; the fictional target's name happened to match a live domain, and the model exploited a real website it took to be part of the exercise.
+
+Based on Irregular's investigation, OpenAI says the model also found and used credentials to operate that same site. OpenAI is explicit that "this did not involve a sophisticated sandbox escape or a zero-day". It also says Irregular has communicated about related incidents involving other labs from the same environment, without naming them.
+
+What separates the AISI case from the earlier disclosures is human-directed deception. This one has an agent researching real people, manufacturing consensus to move them, and cleaning up after itself when challenged. AISI calls it "the first time we have seen risks around autonomy and deception manifest this clearly" without specific prompting in the real world, a claim it scopes to its own testing.
+
+Cybersecurity
+The institute is careful about how far this generalises: it observed a small number of events under very specific conditions and says it cannot yet say how likely the behaviour is in other contexts.
+
+One line runs through all four disclosures: these were evaluations, and the conditions do not match how the models reach the public. That is accurate, and every incident described here happened inside that exception. For the labs, government evaluators and testing firms running these environments, the caveat describes their own conditions.
+
+The fixes, and what is still open
+AISI is treating open internet access as something that must be actively justified rather than enabled by default, and is adding fine-grained network controls across its sandboxing systems. Work on domain allowlisting had sat in the backlog since April, deprioritised in favour of building harder ranges.
+
+The institute is also building synchronous monitoring, a second model reviewing each proposed action before it executes, which it concedes is difficult for cyber evaluations because sanctioned and unsanctioned behaviour both look like offensive cyber operations.
+
+The methods themselves were ordinary: OSINT, throwaway accounts, an obfuscated dropper, a prompt injection in an issue body, and social pressure on a human reviewer. The control that got in the way was ordinary too: GitHub's first-time-contributor hold left the pull request's CI checks queued and unapproved.
+
+AISI's own advice is standard hygiene and caution when verifying outside code contributions, and it points to NCSC guidance on preparing for frontier AI cyber capability. The specific exposure is maintainers who run AI triage agents against public GitHub issues, because the injection was invisible on the rendered page and readable through the API.
+
+The report carries no account names, no repository names, no file hashes, and no domains, so the 145 seeded repositories cannot be identified from it.
+
+AISI has scanned roughly 40,000 historical samples and almost four million messages looking for behaviour it missed, covering about 70% of its cyber evaluations on the models in scope. The results have not yet gone through full manual review.
+
+Anthropic said on July 30 it would publish a redacted transcript of the PyPI run within a week. As of August 5, none had appeared on its newsroom. Model Evaluation and Threat Research (METR) and Redwood Research are reviewing the OpenAI incident, and AISI says it intends to bring METR in on this one, though the scope is still being negotiated.
+
+Found this article interesting? Follow us on Google News, Twitter and LinkedIn to read more exclusive content we post.

@@ -1,0 +1,94 @@
+{
+  "name": "groundrumble",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Research-grounded adversarial testing for LLMs in your browser — generate MITRE ATLAS-mapped attack suites from security research, run them across a model roster, and compare resilience side-by-side. No install, backend, accounts, or telemetry.",
+  "type": "module",
+  "license": "MIT",
+  "author": "TheDead",
+  "homepage": "https://groundrumble.readthedocs.io/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/TheDead91/GroundRumble.git"
+  },
+  "keywords": [
+    "llm-security",
+    "ai-security",
+    "llm-red-teaming",
+    "ai-red-team",
+    "llm-evaluation",
+    "prompt-injection",
+    "jailbreak-testing",
+    "mitre-atlas",
+    "model-evaluation",
+    "privacy"
+  ],
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
+  },
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "dev:https": "vite --config vite.https.config.mjs --host 0.0.0.0 --port 5199 --strictPort",
+    "dev:localhost": "vite --config vite.local.config.mjs --host 127.0.0.1 --port 5198 --strictPort",
+    "build": "vite build",
+    "start": "npm run build && npm run serve",
+    "serve": "vite preview --host 127.0.0.1 --port 4173 --strictPort",
+    "preview": "vite preview",
+    "check:bundle": "node scripts/check-bundle-size.mjs",
+    "lint": "oxlint",
+    "audit": "npm audit --audit-level=high",
+    "screenshots": "node scripts/capture-screenshots.mjs",
+    "atlas-bundle": "node scripts/build-atlas-bundle.mjs",
+    "test": "node --test \"tests/*.unit.test.mjs\" \"tests/*.integration.test.mjs\" \"tests/*.behavior.test.mjs\" \"tests/*.contract.test.mjs\"",
+    "test:benchmark": "node --test tests/endpoint-policy-benchmark.mjs",
+    "test:browser": "node scripts/run-browser-tests.mjs",
+    "test:browser:smoke": "node tests/browser-smoke.mjs",
+    "test:browser:e2e": "node tests/browser-e2e.mjs",
+    "test:e2e:proxy": "node --test tests/proxy-end-to-end.integration.test.mjs",
+    "test:browser:gate": "node scripts/ui-workflow-gate.mjs",
+    "test:exploratory": "node scripts/run-exploratory.mjs",
+    "test:integrity": "node scripts/check-suite-integrity.mjs",
+    "test:coverage": "node scripts/run-coverage.mjs",
+    "test:coverage:unit": "c8 --all --include=src/utils/**/*.js --reporter=text --reporter=html --reporter=json-summary node --test \"tests/*.unit.test.mjs\" \"tests/*.integration.test.mjs\" \"tests/*.behavior.test.mjs\" \"tests/*.contract.test.mjs\"",
+    "test:coverage:ci": "node scripts/run-coverage.mjs --check",
+    "test:coverage:all": "node scripts/run-coverage.mjs",
+    "release:check": "npm run lint && npm run audit && npm run test:integrity && npm run test:coverage:ci && npm run check:bundle",
+    "release:public:dry-run": "node scripts/public-export.mjs --verify"
+  },
+  "c8": {
+    "include": [
+      "src/**/*.js"
+    ],
+    "exclude": [
+      "tests/**"
+    ],
+    "reporter": [
+      "text",
+      "html"
+    ],
+    "reports-dir": ".tmp/coverage"
+  },
+  "dependencies": {
+    "@mozilla/readability": "^0.6.0",
+    "dompurify": "^3.4.13",
+    "js-yaml": "^5.2.3",
+    "lucide-react": "^1.31.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-basic-ssl": "^2.3.0",
+    "@vitejs/plugin-react": "^6.0.4",
+    "c8": "^12.0.0",
+    "jsdom": "^30.0.1",
+    "oxlint": "^1.83.0",
+    "playwright": "^1.62.1",
+    "vite": "^8.2.0"
+  },
+  "allowScripts": {
+    "fsevents@2.3.2": true,
+    "fsevents@2.3.3": true
+  }
+}
