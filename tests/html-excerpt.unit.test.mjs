@@ -62,6 +62,26 @@ const syncLines = syncSource.split('\n').length;
 
 const SEPARATOR = '\n… (truncated)…\n';
 
+// Reference parser (jsdom) for the excluded-element boundary cases: establish
+// what the real HTML parser keeps after script/style/noscript removal so the
+// fallback scanner can be checked against parser semantics, not visual intuition.
+const jsdomVisibleText = (html) => {
+  const dom = new JSDOM(html, { url: 'http://localhost/' });
+  const doc = dom.window.document;
+  doc.querySelectorAll('script, style, noscript').forEach((node) => node.parentNode?.removeChild(node));
+  return (doc.body?.textContent ?? '').replace(/\s+/g, ' ').trim();
+};
+const squish = (s) => s.replace(/\s+/g, '');
+// Assert the scanner's exact output AND that the surviving text agrees with the
+// parser (element-separator spaces aside).
+const assertParserConsistent = (html, expected) => {
+  const excerpt = stripHtml(html);
+  assert.equal(excerpt, expected, `scanner output must be ${JSON.stringify(expected)}`);
+  assert.equal(squish(excerpt), squish(jsdomVisibleText(html)),
+    'the fallback scanner and jsdom must agree on which text survives');
+  return excerpt;
+};
+
 // ── the module carries the pipeline — single home, pure, byte-exact ─────────
 
 test('The module exports exactly the nine pipeline names, each defined once', () => {
@@ -282,6 +302,153 @@ test('stripHtml: tags, scripts, styles, comments and noscript all vanish; whites
   assert.equal(stripHtml(null), '');
 });
 
+test('stripHtml: forgiving excluded-element closing tags never leak body text', () => {
+  const html = '<article>legitimate-before ' +
+    '<SCRIPT data-kind="poison">MODEL_POISON</ScRiPt > ' +
+    '<style media="all">MODEL_POISON</style > ' +
+    '<noscript>MODEL_POISON</noscript > ' +
+    '<script>SECOND_POISON</script > legitimate-after</article>';
+  const excerpt = stripHtml(html);
+  assert.match(excerpt, /legitimate-before/);
+  assert.match(excerpt, /legitimate-after/);
+  assert.doesNotMatch(excerpt, /MODEL_POISON|SECOND_POISON/);
+});
+
+test('extractMainContent: excluded bodies cannot influence the selected region', () => {
+  const html = '<article><p>the legitimate article has slightly more real text than the main candidate</p></article>' +
+    '<main><script>MODEL_POISON MODEL_POISON MODEL_POISON MODEL_POISON MODEL_POISON</script >' +
+    '<style>MODEL_POISON MODEL_POISON MODEL_POISON</style >' +
+    '<noscript>MODEL_POISON MODEL_POISON MODEL_POISON</noscript >' +
+    '<p>short main text</p></main>';
+  const selected = extractMainContent(html);
+  assert.match(selected, /legitimate article has slightly more real text/);
+  assert.doesNotMatch(selected, /MODEL_POISON/);
+});
+
+test('stripHtml: parser-recognized trailing closing syntax is excluded in the Node fallback', () => {
+  const original = globalThis.DOMParser;
+  delete globalThis.DOMParser;
+  try {
+    for (const tag of ['script', 'style', 'noscript']) {
+      const html = `<article>KEEP<${tag}>MODEL_POISON</${tag}\n x>AFTER</article>`;
+      assert.equal(stripHtml(html), 'KEEP AFTER', `${tag} trailing closing syntax must not leak`);
+    }
+  } finally {
+    if (original === undefined) delete globalThis.DOMParser;
+    else globalThis.DOMParser = original;
+  }
+});
+
+test('stripHtml: EOF-terminated excluded elements are removed in the Node fallback', () => {
+  const original = globalThis.DOMParser;
+  delete globalThis.DOMParser;
+  try {
+    for (const tag of ['script', 'style', 'noscript']) {
+      assert.equal(stripHtml(`<article>KEEP<${tag}>MODEL_POISON`), 'KEEP', `${tag} EOF body must not leak`);
+    }
+  } finally {
+    if (original === undefined) delete globalThis.DOMParser;
+    else globalThis.DOMParser = original;
+  }
+});
+
+test('extractMainContent: malformed excluded bodies cannot inflate candidate scoring', () => {
+  const legitimate = 'the legitimate article contains enough real prose to win this selection';
+  const poison = 'MODEL_POISON '.repeat(100);
+  const html = `<article>${legitimate}</article><main><script>${poison}</main>`;
+  const selected = extractMainContent(html);
+  assert.match(selected, /the legitimate article contains enough real prose/);
+  assert.doesNotMatch(selected, /MODEL_POISON/);
+});
+
+test('stripHtml: quoted excluded attributes and comments preserve surrounding text', () => {
+  const html = '<article>before<script data-x=">">MODEL_POISON</script>after' +
+    '<!-- <style>not an element body</style> -->tail</article>';
+  assert.equal(stripHtml(html), 'before after tail');
+});
+
+// ── HTML-BOUNDARY-01 — reviewed excluded-element closing boundaries ─────────
+
+test('stripHtml: parser-unrecognized close lookalikes never terminate the fallback scanner early', () => {
+  const cases = [
+    ['script', '</scriptx>'],
+    ['script', '</script-x>'],
+    ['script', '</ script>'],
+    ['style', '</stylx>'],       // representative: same raw-text close logic
+    ['noscript', '</noscriptx>'], // representative: same raw-text close logic
+  ];
+  for (const [tag, lookalike] of cases) {
+    const html = `<article>BEFORE<${tag}>POISON${lookalike}SWALLOWED</${tag}>TAIL</article>`;
+    const excerpt = assertParserConsistent(html, 'BEFORE TAIL');
+    assert.doesNotMatch(excerpt, /POISON/, `${tag} ${lookalike}: the excluded body must not leak`);
+    assert.doesNotMatch(excerpt, /SWALLOWED/,
+      `${tag} ${lookalike}: text after the lookalike stays inside the raw-text body (parser-consistent)`);
+    assert.match(excerpt, /BEFORE/, `${tag} ${lookalike}: text before the element survives`);
+    assert.match(excerpt, /TAIL/, `${tag} ${lookalike}: text after the real close survives`);
+  }
+});
+
+test('stripHtml: parser-recognized slash closing forms close the excluded element', () => {
+  const cases = [
+    ['script', '/>'],
+    ['script', '/anything>'],
+    ['style', '/>'],
+    ['style', '/anything>'],
+    ['noscript', '/>'],
+    ['noscript', '/anything>'],
+  ];
+  for (const [tag, tail] of cases) {
+    const html = `<article>KEEP<${tag}>POISON</${tag}${tail}AFTER</article>`;
+    const excerpt = assertParserConsistent(html, 'KEEP AFTER');
+    assert.doesNotMatch(excerpt, /POISON/, `${tag} ${tail}: the excluded body does not survive`);
+    assert.match(excerpt, /KEEP/, `${tag} ${tail}: text before the element survives`);
+    assert.match(excerpt, /AFTER/, `${tag} ${tail}: following text survives because the parser closes the element`);
+  }
+});
+
+test('stripHtml: a malformed first block does not corrupt a later valid block', () => {
+  const cases = [
+    '<article>FIRST<script>POISON1</scriptx>SWALLOWED</script>MIDDLE<style>POISON2</style>LAST</article>',
+    '<article>FIRST<noscript>POISON1</noscriptx>SWALLOWED</noscript>MIDDLE<script>POISON2</script>LAST</article>',
+  ];
+  for (const html of cases) {
+    const excerpt = assertParserConsistent(html, 'FIRST MIDDLE LAST');
+    assert.doesNotMatch(excerpt, /POISON1|POISON2|SWALLOWED/, 'excluded bodies and swallowed text do not leak');
+    assert.match(excerpt, /FIRST/);
+    assert.match(excerpt, /MIDDLE/, 'legitimate text between the blocks survives');
+    assert.match(excerpt, /LAST/);
+  }
+});
+
+test('stripHtml: a valid first block does not corrupt a later malformed block', () => {
+  const cases = [
+    '<article>FIRST<script>POISON1</script>MIDDLE<style>POISON2</stylex>SWALLOWED</style>LAST</article>',
+    '<article>FIRST<style>POISON1</style>MIDDLE<noscript>POISON2</noscriptx>SWALLOWED</noscript>LAST</article>',
+  ];
+  for (const html of cases) {
+    const excerpt = assertParserConsistent(html, 'FIRST MIDDLE LAST');
+    assert.doesNotMatch(excerpt, /POISON1|POISON2|SWALLOWED/, 'excluded bodies and swallowed text do not leak');
+    assert.match(excerpt, /FIRST/);
+    assert.match(excerpt, /MIDDLE/, 'legitimate text between the blocks survives');
+    assert.match(excerpt, /LAST/);
+  }
+});
+
+test('stripHtml: noscript bodies are excluded in body AND head parsing contexts', () => {
+  const body = '<html><body><article>KEEP<noscript>POISON</noscript>AFTER</article></body></html>';
+  assert.equal(stripHtml(body), 'KEEP AFTER', 'body-context noscript drops like script/style');
+  assert.equal(squish(stripHtml(body)), squish(jsdomVisibleText(body)), 'body-context noscript matches the parser');
+
+  const head = '<html><head><noscript>POISON</noscript></head><body><p>KEEP</p></body></html>';
+  // With scripting enabled jsdom parses a head-<noscript> body as markup and
+  // hoists the text out (verified below); the fallback scanner still removes it
+  // so a noscript payload can never reach the excerpt in any parsing context.
+  assert.equal(stripHtml(head), 'KEEP', 'head-context noscript content is still excluded');
+  assert.doesNotMatch(stripHtml(head), /POISON/, 'no noscript payload leaks from the head');
+  assert.equal(squish(jsdomVisibleText(head)), 'POISONKEEP',
+    'the parser (scripting on) would expose the head-noscript text; the scanner deliberately refuses');
+});
+
 test('stripHtml: entities decode AFTER the tag strip, so escaped markup surfaces as text', () => {
   assert.equal(stripHtml('<p>&lt;i&gt;hi&lt;/i&gt;</p>'), '<i>hi</i>');
   assert.equal(stripHtml('<p>A &amp; B</p>'), 'A & B');
@@ -297,6 +464,24 @@ test('stripHtml: integrates the largest-region pick and the decode in one pass',
 
 // extractArticle is directly testable (it carries the Readability import) —
 // including the guard behavior for the no-DOMParser path.
+test('extractArticle: excludes forgiving script/style/noscript bodies before Readability', () => {
+  const dom = new JSDOM('<!doctype html><html><body></body></html>', { url: 'http://localhost/' });
+  const original = globalThis.DOMParser;
+  globalThis.DOMParser = dom.window.DOMParser;
+  try {
+    const html = '<article><h1>Real Story</h1><p>' +
+      ('legitimate article text with enough substance. '.repeat(10)) +
+      '</p><script>MODEL_POISON</script ><style>MODEL_POISON</style >' +
+      '<noscript>MODEL_POISON</noscript ></article>';
+    const art = extractArticle(html);
+    assert.ok(art);
+    assert.match(art.text, /legitimate article text/);
+    assert.doesNotMatch(art.text, /MODEL_POISON/);
+  } finally {
+    globalThis.DOMParser = original;
+  }
+});
+
 test('extractArticle: extracts a substantial article via Readability and reports its title', () => {
   const dom = new JSDOM('<!doctype html><html><body></body></html>', { url: 'http://localhost/' });
   const original = globalThis.DOMParser;

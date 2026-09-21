@@ -4,6 +4,64 @@
 // stripHtml path.
 import { Readability } from '@mozilla/readability';
 
+// Remove excluded raw-text elements for candidate scoring and the Node fallback.
+// This deliberately tokenizes only enough HTML to keep quoted `>` characters and
+// comments from changing tag boundaries; it is not intended to be a general HTML
+// parser. Once inside an excluded element, the HTML tokenizer treats the first
+// matching end-tag token (including parser-tolerated trailing attributes) as the
+// boundary, or EOF if no such token exists.
+const EXCLUDED_ELEMENTS = new Set(['script', 'style', 'noscript']);
+
+const findTagEnd = (html, start) => {
+  let quote = '';
+  for (let i = start; i < html.length; i += 1) {
+    const ch = html[i];
+    if (quote) { if (ch === quote) quote = ''; }
+    else if (ch === '"' || ch === "'") quote = ch;
+    else if (ch === '>') return i;
+  }
+  return -1;
+};
+
+const readTagName = (html, start) => html.slice(start).match(/^<([A-Za-z][A-Za-z0-9:-]*)(?=[\s/>])/)?.[1].toLowerCase() || '';
+
+const findExcludedEnd = (html, start, name) => {
+  for (let cursor = start; cursor < html.length;) {
+    const lt = html.indexOf('<', cursor);
+    if (lt < 0) return html.length;
+    const closeStart = lt + 2;
+    const closeName = html[lt + 1] === '/' ? html.slice(closeStart, closeStart + name.length).toLowerCase() : '';
+    const afterName = html[closeStart + name.length];
+    if (closeName === name && (afterName === '>' || afterName === '/' || /\s/.test(afterName || ''))) {
+      const end = findTagEnd(html, closeStart + name.length);
+      return end < 0 ? html.length : end + 1;
+    }
+    cursor = lt + 1;
+  }
+  return html.length;
+};
+
+const removeExcludedElements = (html) => {
+  const source = String(html || '');
+  let output = '';
+  for (let cursor = 0; cursor < source.length;) {
+    const lt = source.indexOf('<', cursor);
+    if (lt < 0) return output + source.slice(cursor);
+    output += source.slice(cursor, lt);
+    if (source.startsWith('<!--', lt)) {
+      const end = source.indexOf('-->', lt + 4);
+      if (end < 0) return output + source.slice(lt);
+      output += source.slice(lt, end + 3); cursor = end + 3; continue;
+    }
+    const tagEnd = findTagEnd(source, lt + 1);
+    if (tagEnd < 0) return output + source.slice(lt);
+    const name = readTagName(source, lt);
+    if (EXCLUDED_ELEMENTS.has(name)) { output += ' '; cursor = findExcludedEnd(source, tagEnd + 1, name); }
+    else { output += source.slice(lt, tagEnd + 1); cursor = tagEnd + 1; }
+  }
+  return output;
+};
+
 // Prefer the main article content over site chrome. Pages vary a lot: some
 // wrap the article in <article>, others in <main>, and many list sidebar
 // "latest" teasers as <article> blocks. Collect every <article>/<main> region
@@ -15,9 +73,7 @@ export const extractMainContent = (html) => {
   region(/<article[\s\S]*?<\/article>/gi);
   region(/<main[\s\S]*?<\/main>/gi);
   if (candidates.length === 0) return src;
-  const textLen = (s) => s
-    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
-    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+  const textLen = (s) => removeExcludedElements(s)
     .replace(/<[^>]+>/g, ' ')
     .replace(/\s+/g, ' ')
     .trim().length;
@@ -53,10 +109,7 @@ export const decodeHtmlEntities = (html) => String(html || '')
 export const stripHtml = (html) => {
   const body = extractMainContent(String(html || ''));
   return decodeHtmlEntities(
-    body
-      .replace(/<script[\s\S]*?<\/script>/gi, ' ')
-      .replace(/<style[\s\S]*?<\/style>/gi, ' ')
-      .replace(/<noscript[\s\S]*?<\/noscript>/gi, ' ')
+    removeExcludedElements(body)
       .replace(/<!--[\s\S]*?-->/g, ' ')
       .replace(/<[^>]+>/g, ' ')
       .replace(/\s+/g, ' ')
@@ -86,6 +139,7 @@ export const extractArticle = (html) => {
   try {
     if (typeof DOMParser === 'undefined') return null;
     const doc = new DOMParser().parseFromString(String(html || ''), 'text/html');
+    doc.querySelectorAll('script, style, noscript').forEach((node) => node.parentNode?.removeChild(node));
     const article = new Readability(doc, { charThreshold: 200 }).parse();
     const text = (article && article.textContent ? article.textContent : '').trim();
     if (text.length >= 300) return { text, title: article.title };
