@@ -41,7 +41,7 @@ import * as apiIndexNs from '../src/utils/api/index.js';
 import * as apiNs from '../src/utils/api.js';
 import { fetchSourceExcerpt } from '../src/utils/api/atlas-sync.js';
 import { setProxyConfig } from '../src/utils/api/proxy.js';
-import { stubFetch, textRes } from './helpers/httpx.mjs';
+import { stubFetch, textRes, hostIs } from './helpers/httpx.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const readSource = (relPath) => readFileSync(join(root, relPath), 'utf8').replace(/\r\n/g, '\n');
@@ -234,6 +234,47 @@ test('decodeHtmlEntities: private-use and astral code points are DROPPED, not ma
 
 test('decodeHtmlEntities: single pass — an escaped entity is not re-decoded', () => {
   assert.equal(decodeHtmlEntities('&amp;#65;'), '&#65;', '&amp; becomes & first; the numeric pass already ran, so no double decode');
+});
+
+test('decodeHtmlEntities (#28): nested escaped entities decode once — replacement output is never re-scanned', () => {
+  const nested = {
+    '&amp;lt;': '&lt;',
+    '&amp;gt;': '&gt;',
+    '&amp;quot;': '&quot;',
+    '&amp;apos;': '&apos;',
+    '&amp;lt;script&amp;gt;': '&lt;script&gt;',
+    '&#38;lt;': '&lt;',
+    '&#x26;lt;': '&lt;',
+    '&amp;#65;': '&#65;',
+  };
+  for (const [input, expected] of Object.entries(nested)) {
+    assert.equal(decodeHtmlEntities(input), expected, `single-pass: ${input} must not re-decode its output`);
+  }
+});
+
+test('decodeHtmlEntities (#28): ordinary entities still decode exactly once', () => {
+  const ordinary = {
+    '&amp;': '&',
+    '&lt;': '<',
+    '&gt;': '>',
+    '&quot;': '"',
+    '&apos;': "'",
+    '&#39;': "'",
+    '&#65;': 'A',
+    '&#x41;': 'A',
+    '&nbsp;': ' ',
+  };
+  for (const [input, expected] of Object.entries(ordinary)) {
+    assert.equal(decodeHtmlEntities(input), expected, `single-pass ordinary: ${input}`);
+  }
+});
+
+test('decodeHtmlEntities (#28): mixed multi-entity input decodes independently in one pass', () => {
+  assert.equal(
+    decodeHtmlEntities('&amp;lt;x&amp;gt; &quot;&amp;amp;&quot; &#38;lt;'),
+    '&lt;x&gt; "&amp;" &lt;',
+    'each original entity decodes once; decoded ampersands never re-consume following text'
+  );
 });
 
 test('extractMainContent: no article/main regions → the source passes through untouched', () => {
@@ -596,7 +637,7 @@ test('readBoundedText: without a streaming body it falls back to res.text(), def
 
 test('The re-wired excerpt flow is byte-identical for the same inputs (small cap)', async () => {
   setProxyConfig({ enabled: false, baseUrl: '', mode: 'fallback' });
-  stubFetch([[(r) => r.url.includes('raw.githubusercontent.com/'), () => textRes('x'.repeat(2000))]]);
+  stubFetch([[(r) => hostIs(r.url, 'raw.githubusercontent.com'), () => textRes('x'.repeat(2000))]]);
   const r = await fetchSourceExcerpt('https://github.com/o/r/blob/main/docs/file.md', 500);
   assert.equal(r.kind, 'github');
   assert.equal(r.excerpt, 'x'.repeat(500), 'the caller cap is honored exactly through the imported pipeline');
@@ -604,7 +645,7 @@ test('The re-wired excerpt flow is byte-identical for the same inputs (small cap
 });
 
 test('The default README cap is still 12000 through the moved MAX_README_CHARS', async () => {
-  stubFetch([[(r) => r.url.includes('raw.githubusercontent.com/'), () => textRes('y'.repeat(20000))]]);
+  stubFetch([[(r) => hostIs(r.url, 'raw.githubusercontent.com'), () => textRes('y'.repeat(20000))]]);
   const r = await fetchSourceExcerpt('https://github.com/o/r/blob/main/README.md');
   assert.equal(r.excerpt, 'y'.repeat(12000), 'the hard ceiling rides on the moved constant');
 });

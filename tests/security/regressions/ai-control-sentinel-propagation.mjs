@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { generateTestsWithAI, critiqueGeneratedTests } from '../../../src/utils/ai-generator.js';
 import { evaluateWithAIJudgePrompt } from '../../../src/utils/ai-judge.js';
 import { queryModel } from '../../../src/utils/api/provider-client.js';
+import { hostIs } from '../../helpers/httpx.mjs';
 
 const SENTINEL = 'AI_CONTROL_SENTINEL_C';
 const techniqueId = 'AML.T0051';
@@ -57,7 +58,7 @@ test('harmless marker remains data across generator, critic, target, and Judge s
     const body = JSON.parse(init.body);
     requests.push({ url: String(url), body });
 
-    if (String(url).includes('target.example.com')) {
+    if (hostIs(url, 'target.example.com')) {
       return Response.json({ choices: [{ message: { content: `${SENTINEL} target response` } }] });
     }
 

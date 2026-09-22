@@ -3,7 +3,7 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
-import { jsonRes, textRes, stubFetch } from './helpers/httpx.mjs';
+import { jsonRes, textRes, stubFetch, hostIs } from './helpers/httpx.mjs';
 
 const dom = new JSDOM('<!doctype html><html><body></body></html>', { url: 'http://localhost/' });
 globalThis.window = dom.window;
@@ -69,7 +69,7 @@ test('GitHub source extraction remains direct when the proxy is disabled', async
   const calls = [];
   stubFetch([[(r) => {
     calls.push(r.url);
-    return r.url.includes('raw.githubusercontent.com/');
+    return hostIs(r.url, 'raw.githubusercontent.com');
   }, () => textRes('DIRECT GITHUB CONTENT')]]);
   const result = await fetchSourceExcerpt('https://github.com/owner/repo/blob/main/README.md', 5000);
   assert.equal(result.kind, 'github');
@@ -85,8 +85,8 @@ test('normalizeGitHubUrl: web, ssh, www, and .git forms', async () => {
   const meta = jsonRes({ description: 'A great repo', default_branch: 'dev' });
   const readme = textRes('# My Repo\n\nThis repo explains a real attack pattern with concrete payloads.\n\n' + 'd'.repeat(1400));
   stubFetch([
-    [(r) => r.url.includes('api.github.com/repos/'), () => meta],
-    [(r) => r.url.includes('raw.githubusercontent.com/'), () => readme]
+    [(r) => hostIs(r.url, 'api.github.com') && r.url.includes('/repos/'), () => meta],
+    [(r) => hostIs(r.url, 'raw.githubusercontent.com'), () => readme]
   ]);
   for (const url of [
     'https://github.com/owner/repo',
@@ -103,7 +103,7 @@ test('normalizeGitHubUrl: web, ssh, www, and .git forms', async () => {
 
 test('GitHub blob/raw URLs fetch the specific file directly', async () => {
   const file = textRes('MARKDOWN CONTENT of the targeted file');
-  stubFetch([[(r) => r.url.includes('raw.githubusercontent.com/'), () => file]]);
+  stubFetch([[(r) => hostIs(r.url, 'raw.githubusercontent.com'), () => file]]);
   const r = await fetchFixture('https://github.com/owner/repo/blob/main/docs/adversarial.md', 5000);
   assert.ok(r.excerpt.includes('MARKDOWN CONTENT'));
 });
@@ -114,7 +114,7 @@ test('GitHub tree URLs resolve the requested directory contents', async () => {
       { type: 'file', name: 'notes.md', download_url: 'https://raw/x/notes.md' },
       { type: 'dir', name: 'sub' }
     ])],
-    [(r) => r.url.includes('raw.githubusercontent.com/'), (req) => textRes('tree path notes: ' + req.url.split('/').pop())]
+    [(r) => hostIs(r.url, 'raw.githubusercontent.com'), (req) => textRes('tree path notes: ' + req.url.split('/').pop())]
   ]);
   const r = await fetchFixture('https://github.com/o/r/tree/main/docs', 5000);
   assert.ok(r.excerpt.includes('tree path notes: notes.md'), 'should pull readable files from the tree path');
@@ -123,7 +123,7 @@ test('GitHub tree URLs resolve the requested directory contents', async () => {
 test('GitHub tree URLs fetch a single-file listing directly', async () => {
   stubFetch([
     [(r) => r.url.includes('/contents/guide.md?'), () => jsonRes({ type: 'file', name: 'guide.md', download_url: 'https://raw.githubusercontent.com/x/guide.md' })],
-    [(r) => r.url.includes('raw.githubusercontent.com/x/guide.md'), () => textRes('SINGLE FILE CONTENT')]
+    [(r) => hostIs(r.url, 'raw.githubusercontent.com') && r.url.includes('/x/guide.md'), () => textRes('SINGLE FILE CONTENT')]
   ]);
   const r = await fetchFixture('https://github.com/o/r/tree/main/guide.md', 5000);
   assert.ok(r.excerpt.includes('SINGLE FILE CONTENT'));
@@ -132,8 +132,8 @@ test('GitHub tree URLs fetch a single-file listing directly', async () => {
 test('excerpt caps respect a caller-requested smaller limit', async () => {
   const readme = 'x'.repeat(2000);
   stubFetch([
-    [(r) => r.url.includes('api.github.com/repos/'), () => jsonRes({ description: '', default_branch: 'main' })],
-    [(r) => r.url.includes('raw.githubusercontent.com/'), () => textRes(readme)]
+    [(r) => hostIs(r.url, 'api.github.com') && r.url.includes('/repos/'), () => jsonRes({ description: '', default_branch: 'main' })],
+    [(r) => hostIs(r.url, 'raw.githubusercontent.com'), () => textRes(readme)]
   ]);
   const r = await fetchFixture('https://github.com/o/r', 500);
   assert.ok(r.excerpt.length <= 520, 'should honor the 500-char request, not the 12000 hard cap');
@@ -141,14 +141,14 @@ test('excerpt caps respect a caller-requested smaller limit', async () => {
 
 test('GitHub repo with a thin README pulls extra root markdown files', async () => {
   stubFetch([
-    [(r) => r.url.includes('api.github.com/repos/') && r.url.endsWith('/contents/'), () => jsonRes([
+    [(r) => hostIs(r.url, 'api.github.com') && r.url.includes('/repos/') && r.url.endsWith('/contents/'), () => jsonRes([
       { type: 'file', name: 'attack.py' },
       { type: 'file', name: 'notes.md' },
       { type: 'dir', name: 'sub' }
     ])],
-    [(r) => r.url.includes('raw.githubusercontent.com/') && /notes\.md$/.test(r.url), () => textRes('extra markdown detail ' + 'x'.repeat(200))],
-    [(r) => r.url.includes('raw.githubusercontent.com/'), () => textRes('TINY')],
-    [(r) => r.url.includes('api.github.com/repos/'), () => jsonRes({ description: '', default_branch: 'main' })]
+    [(r) => hostIs(r.url, 'raw.githubusercontent.com') && /notes\.md$/.test(r.url), () => textRes('extra markdown detail ' + 'x'.repeat(200))],
+    [(r) => hostIs(r.url, 'raw.githubusercontent.com'), () => textRes('TINY')],
+    [(r) => hostIs(r.url, 'api.github.com') && r.url.includes('/repos/'), () => jsonRes({ description: '', default_branch: 'main' })]
   ]);
   const r = await fetchFixture('https://github.com/o/r', 5000);
   assert.ok(r.excerpt.includes('extra markdown detail'), 'extra files should be appended to a thin README');
@@ -156,8 +156,8 @@ test('GitHub repo with a thin README pulls extra root markdown files', async () 
 
 test('GitHub repo with no README falls back to the description as excerpt', async () => {
   stubFetch([
-    [(r) => r.url.includes('api.github.com/repos/'), () => jsonRes({ description: 'DESC FALLBACK', default_branch: 'main' })],
-    [(r) => r.url.includes('raw.githubusercontent.com/'), () => jsonRes({}, 404)]
+    [(r) => hostIs(r.url, 'api.github.com') && r.url.includes('/repos/'), () => jsonRes({ description: 'DESC FALLBACK', default_branch: 'main' })],
+    [(r) => hostIs(r.url, 'raw.githubusercontent.com'), () => jsonRes({}, 404)]
   ]);
   const r = await fetchFixture('https://github.com/o/r', 5000);
   assert.equal(r.excerpt, 'DESC FALLBACK');

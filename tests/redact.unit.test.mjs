@@ -29,11 +29,10 @@ test('redactNotificationText replaces short 16–39 char token runs', () => {
   );
 });
 
-test('redactNotificationText preserves URL-looking and dotted runs', () => {
+test('redactNotificationText preserves benign URL and hostname prose byte-identically', () => {
   const msg = 'see https://example.com/some/path for details about example.com';
   const out = redactNotificationText(msg);
-  assert.ok(out.includes('https://example.com/some/path'), 'URL is preserved');
-  assert.ok(out.includes('example.com'), 'dotted hostname is preserved');
+  assert.equal(out, msg, 'benign URL and hostname prose is preserved unchanged');
 });
 
 test('redactNotificationText leaves short tokens and placeholder text alone', () => {

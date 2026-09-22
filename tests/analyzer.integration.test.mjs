@@ -107,6 +107,25 @@ test('analyzer delimiters mark source content as untrusted evidence', async () =
   } finally { stub.close(); }
 });
 
+test('sourceBlock keeps its code-owned label framing byte-identical', async () => {
+  const seen = [];
+  const stub = http.createServer((req, res) => {
+    let raw = ''; req.on('data', (c) => { raw += c; }); req.on('end', () => {
+      const body = JSON.parse(raw);
+      seen.push(body.messages?.[1]?.content || '');
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ choices: [{ message: { content: '{"vulnerabilityClass":"C","vectors":[],"weight":1}' } }] }));
+    });
+  });
+  await new Promise((resolve) => stub.listen(0, resolve));
+  try {
+    const injJudge = { provider: 'mock', model: 'm', endpoint: `http://localhost:${stub.address().port}/v1/chat/completions`, allowPrivate: true };
+    await analyzeSourceWithAI(injJudge, { title: 'S', description: 'D', excerpt: 'plain' }, CATALOG);
+    assert.ok(seen[0].includes('<untrusted_source name="source">'), 'constant label keeps its exact attribute framing');
+    assert.ok(!seen[0].includes('name="source&quot;'), 'no quote escaping introduced for the constant label');
+  } finally { stub.close(); }
+});
+
 test('analyzeSourceWithAI throws when no JSON is returned', async () => {
   const stub = http.createServer((req, res) => {
     let raw = ''; req.on('data', (c) => { raw += c; }); req.on('end', () => {

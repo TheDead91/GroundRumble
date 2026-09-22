@@ -14,7 +14,7 @@ import assert from 'node:assert/strict';
 import { dump as yamlDump } from 'js-yaml';
 
 import { fetchATLASFramework, fetchSourceExcerpt } from '../src/utils/api/atlas-sync.js';
-import { jsonRes, textRes, stubFetch, withFastTimers } from './helpers/httpx.mjs';
+import { jsonRes, textRes, stubFetch, withFastTimers, hostIs } from './helpers/httpx.mjs';
 
 let savedFetch;
 before(() => { savedFetch = globalThis.fetch; });
@@ -169,7 +169,7 @@ test('a streamed source read stops at the byte budget, cancels the reader, and r
   const chunk2 = pattern('b', 66000);
   const { res, state } = streamedRes([chunk1, chunk2], { closeAtEnd: false });
   stubFetch([
-    [(r) => r.url.includes('raw.githubusercontent.com'), (req) => { seen.push(req.url); return res; }]
+    [(r) => hostIs(r.url, 'raw.githubusercontent.com'), (req) => { seen.push(req.url); return res; }]
   ]);
   const out = await fetchSourceExcerpt('https://github.com/probe/atlas/blob/main/README.md', 12000);
   assert.deepEqual(seen, ['https://raw.githubusercontent.com/probe/atlas/main/README.md']);
@@ -191,7 +191,7 @@ test('multi-chunk streams under the budget decode in order and the reader is nev
   const chunk3 = pattern('z', 700);
   const { res, state } = streamedRes([chunk1, chunk2, chunk3]);
   stubFetch([
-    [(r) => r.url.includes('raw.githubusercontent.com'), () => res]
+    [(r) => hostIs(r.url, 'raw.githubusercontent.com'), () => res]
   ]);
   const out = await fetchSourceExcerpt('https://github.com/probe/atlas/blob/main/README.md');
   assert.equal(out.kind, 'github');
@@ -202,7 +202,7 @@ test('multi-chunk streams under the budget decode in order and the reader is nev
 test('a stream that ends before emitting any chunk yields an empty excerpt', async () => {
   const { res, state } = streamedRes([]);
   stubFetch([
-    [(r) => r.url.includes('raw.githubusercontent.com'), () => res]
+    [(r) => hostIs(r.url, 'raw.githubusercontent.com'), () => res]
   ]);
   const out = await fetchSourceExcerpt('https://github.com/probe/atlas/blob/main/README.md');
   assert.equal(out.kind, 'github');

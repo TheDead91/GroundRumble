@@ -52,8 +52,12 @@ const ATLAS_SYNC_HOSTS = /raw\.githubusercontent\.com|api\.github\.com|github\.c
 // providers in one pass). The script self-disables via sessionStorage
 // so scenario-triggered reloads never re-seed over state the workflow produced.
 async function open(page, seed = {}) {
-  const script = { content: `(() => { if (!sessionStorage.getItem('__grSeeded')) { sessionStorage.setItem('__grSeeded', '1'); const s = ${JSON.stringify({ ...BASE_SEED, ...seed })}; for (const [k, v] of Object.entries(s)) localStorage.setItem(k, v); } })();` };
-  await page.context().addInitScript(script);
+  await page.context().addInitScript((merged) => {
+    if (!sessionStorage.getItem('__grSeeded')) {
+      sessionStorage.setItem('__grSeeded', '1');
+      for (const [k, v] of Object.entries(merged)) localStorage.setItem(k, v);
+    }
+  }, { ...BASE_SEED, ...seed });
   // The app auto-syncs MITRE ATLAS from GitHub shortly after load. Serve the
   // hermetic document for those requests so the gate never sees rate-limit
   // failures from the live CDN.

@@ -5,7 +5,7 @@ import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
 import { dump as yamlDump } from 'js-yaml';
-import { jsonRes, textRes, stubFetch, withFastTimers } from './helpers/httpx.mjs';
+import { jsonRes, textRes, stubFetch, withFastTimers, hostIs } from './helpers/httpx.mjs';
 
 const store = new Map();
 globalThis.localStorage = {
@@ -144,7 +144,7 @@ const chatOk = jsonRes({ choices: [{ message: { content: 'REPLY' } }] });
 const groqCp = { id: 'groq', connector: 'openai', endpoint: 'https://api.groq.com/openai/v1', apiKey: 'g' };
 
 test('queryModel routes an OpenAI-compatible provider by endpoint', async () => {
-  stubFetch([[(r) => r.url.includes('api.groq.com'), () => chatOk]]);
+  stubFetch([[(r) => hostIs(r.url, 'api.groq.com'), () => chatOk]]);
   assert.equal(await queryModel('groq', 'm', 'sys', 'user', [groqCp]), 'REPLY');
 });
 
@@ -669,7 +669,7 @@ test('rate limiter sleeps to enforce rpm and honors aborts', async () => {
 // Keep the exports used above reachable, and import lodash-ish assert on headers:
 test('request headers flow to provider fetches', async () => {
   const cp = { id: 'groq', connector: 'openai', endpoint: 'https://api.groq.com/openai/v1', apiKey: 'hdr-key' };
-  stubFetch([[(r) => r.url.includes('api.groq.com'), (req) => {
+  stubFetch([[(r) => hostIs(r.url, 'api.groq.com'), (req) => {
     assert.equal(req.headers.Authorization, 'Bearer hdr-key');
     return chatOk;
   }]]);

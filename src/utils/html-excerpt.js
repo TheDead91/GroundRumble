@@ -85,26 +85,21 @@ export const extractMainContent = (html) => {
   return best.len > 0 ? best.c : src;
 };
 
-// Decodes common named + numeric HTML entities. Numeric entities that map to
-// private-use or astral code points (icon-font glyphs, emoji) are dropped — they
-// are meaningless to an LLM and would pollute excerpts.
-export const decodeHtmlEntities = (html) => String(html || '')
-  .replace(/&#(\d+);/g, (_, n) => {
-    const cp = Number(n);
-    if ((cp >= 0xE000 && cp <= 0xF8FF) || cp > 0xFFFF) return '';
-    return String.fromCodePoint(cp);
-  })
-  .replace(/&#x([0-9a-f]+);/gi, (_, h) => {
-    const cp = parseInt(h, 16);
-    if ((cp >= 0xE000 && cp <= 0xF8FF) || cp > 0xFFFF) return '';
-    return String.fromCodePoint(cp);
-  })
-  .replace(/&nbsp;/g, ' ')
-  .replace(/&amp;/g, '&')
-  .replace(/&lt;/g, '<')
-  .replace(/&gt;/g, '>')
-  .replace(/&quot;/g, '"')
-  .replace(/&#39;|&apos;/g, "'");
+// Decodes common named + numeric HTML entities in a single pass — each entity in
+// the input is replaced at most once, and replacement characters are never
+// re-scanned (so `&amp;lt;` surfaces as `&lt;`, not `<`). Numeric entities that
+// map to private-use or astral code points (icon fonts, emoji) are dropped.
+export const decodeHtmlEntities = (html) => String(html || '').replace(
+  /&#(\d+);|&#[xX]([0-9a-fA-F]+);|&(nbsp|amp|lt|gt|quot|apos);/g,
+  (match, dec, hex, name) => {
+    if (dec !== undefined || hex !== undefined) {
+      const cp = dec !== undefined ? Number(dec) : parseInt(hex, 16);
+      if ((cp >= 0xE000 && cp <= 0xF8FF) || cp > 0xFFFF) return '';
+      return String.fromCodePoint(cp);
+    }
+    return ({ nbsp: ' ', amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" }[name] ?? match);
+  }
+);
 
 export const stripHtml = (html) => {
   const body = extractMainContent(String(html || ''));

@@ -12,7 +12,7 @@ import {
   queryRawProvider, queryModel, testProvider, extractByPath, providerFetch, parseHeaders, fetchProviderModels
 } from '../src/utils/api/provider-client.js';
 import { setProxyConfig, setProxyConfirmHandler, resetProxyConsent, getConsentedProxyCategories } from '../src/utils/api/proxy.js';
-import { jsonRes, stubFetch } from './helpers/httpx.mjs';
+import { jsonRes, stubFetch, hostIs } from './helpers/httpx.mjs';
 
 let savedFetch;
 before(() => { savedFetch = globalThis.fetch; });
@@ -286,7 +286,7 @@ test('providerFetch falls back to the direct fetch when proxy consent is decline
   setProxyConfig({ enabled: true, baseUrl: RELAY_BASE, mode: 'fallback', categories: { providers: true } });
   setProxyConfirmHandler(async () => false);
   const seen = [];
-  stubFetch([[(r) => r.url.includes('generativelanguage.googleapis.com'), (req) => {
+  stubFetch([[(r) => hostIs(r.url, 'generativelanguage.googleapis.com'), (req) => {
     seen.push(req.url);
     return jsonRes({ direct: true });
   }]]);
@@ -301,7 +301,7 @@ test('providerFetch relays consented provider calls through the configured proxy
   setProxyConfig({ enabled: true, baseUrl: RELAY_BASE, mode: 'fallback', categories: { providers: true } });
   setProxyConfirmHandler(async () => true);
   const seen = [];
-  stubFetch([[(r) => r.url.includes('relay.example'), (req) => {
+  stubFetch([[(r) => hostIs(r.url, 'relay.example'), (req) => {
     seen.push(req);
     return jsonRes({ relayed: true });
   }]]);

@@ -22,6 +22,18 @@ export const textRes = (text, status = 200, h = {}) => ({
   json: async () => { throw new Error('not json'); }
 });
 
+// Exact parsed-hostname comparison for mock routing. Parses `url` structurally
+// and compares `URL.hostname` for equality — never a substring — so a host that
+// merely *contains* `host` (or vice versa) does not match. Malformed or
+// non-URL input returns false.
+export const hostIs = (url, host) => {
+  try {
+    return new URL(String(url)).hostname === host;
+  } catch {
+    return false;
+  }
+};
+
 const dispatch = async (routes, req, fallback) => {
   for (const [pred, handler] of routes) {
     if (pred(req)) return typeof handler === 'function' ? handler(req) : handler;

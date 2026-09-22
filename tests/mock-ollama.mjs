@@ -1,9 +1,10 @@
 // Minimal OpenAI-compatible mock server used by the proxy end-to-end tests.
 // Serves /v1/models, /v1/chat/completions, a /redirect hop, and /stats for
-// asserting which endpoints were hit. Listens on 127.0.0.1:3999.
+// asserting which endpoints were hit. Binds an OS-assigned port (listen(0)) on
+// 127.0.0.1 and reports the actual bound port to the parent over the IPC
+// channel only after the server is listening.
 import http from 'node:http';
 
-const PORT = Number(process.env.MOCK_PORT || 3999);
 const HOST = '127.0.0.1';
 
 const hits = [];
@@ -58,14 +59,17 @@ const server = http.createServer((req, res) => {
   return sendJson(res, 404, { error: 'not found' });
 });
 
-server.listen(PORT, HOST, () => {
+server.listen(0, HOST, () => {
+  const { port } = server.address();
   // Quiet by default so normal `npm test` output stays trustworthy; set
   // MOCK_VERBOSE=1 when debugging the proxy end-to-end harness.
-  if (process.env.MOCK_VERBOSE === '1') console.log(`mock-ollama listening on http://${HOST}:${PORT}`);
+  if (process.env.MOCK_VERBOSE === '1') console.log(`mock-ollama listening on http://${HOST}:${port}`);
+  if (process.send) process.send({ type: 'ready', port });
 });
 
-const shutdown = () => server.close(() => process.exit(0));
+const shutdown = () => {
+  if (!server.listening) { process.exit(0); return; }
+  server.close(() => process.exit(0));
+};
 process.on('SIGTERM', shutdown);
 process.on('SIGINT', shutdown);
-
-if (process.send) process.send({ type: 'ready', port: PORT });
